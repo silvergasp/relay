@@ -40,12 +40,14 @@ jobs:
           toolchain: 1.72.0
           override: true
       - name: "Build cargo docs"
-        run: cargo doc --manifest-path=compiler/Cargo.toml --locked --features vendored
+        run: |
+          cargo doc --manifest-path=compiler/Cargo.toml --locked --features vendored
+          zip cargo-docs.zip compiler/target/doc
 
       - uses: actions/upload-artifact@v3
         with:
           name: compiler-cargo-docs
-          path: compiler/target/doc
+          path: cargo-docs.zip
 
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -62,12 +64,6 @@ jobs:
           name: compiler-playground-package
           path: tmp/compiler-playground-package
 
-      - name: Download Cargo docs
-        uses: actions/download-artifact@v2
-        with:
-          name: compiler-cargo-docs
-          path: tmp/compiler-cargo-docs
-
       - name: Link Compiler Explorer
         run: yarn link
         working-directory: tmp/compiler-playground-package
@@ -79,11 +75,17 @@ jobs:
           yarn build
         working-directory: website/
 
-     
-      - name: Install and Build
+      - name: Download Cargo docs
+        uses: actions/download-artifact@v2
+        with:
+          name: compiler-cargo-docs
+          path: tmp/cargo-docs.zip
+
+      - name: Install cargo docs
         run: |
-          cp -r tmp/compiler-cargo-docs build 
-        working-directory: website/
+          unzip tmp/cargo-docs.zip
+          mv -r docs build/cargo-docs
+        working-directory: website
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@3.7.1
