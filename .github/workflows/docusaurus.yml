@@ -30,9 +30,26 @@ jobs:
           name: compiler-playground-package
           path: compiler/crates/relay-compiler-playground/pkg/
 
+  build-cargo-docs:
+    name: Build cargo docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.72.0
+          override: true
+      - name: "Build cargo docs"
+        run: cargo doc --manifest-path=compiler/Cargo.toml --locked --features vendored
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: compiler-cargo-docs
+          path: compiler/target/doc
+
   build-and-deploy:
     runs-on: ubuntu-latest
-    needs: [build-compiler-explorer]
+    needs: [build-compiler-explorer, build-cargo-docs]
     steps:
       - name: Checkout
         uses: actions/checkout@v2.3.1
@@ -45,6 +62,12 @@ jobs:
           name: compiler-playground-package
           path: tmp/compiler-playground-package
 
+      - name: Download Cargo docs
+        uses: actions/download-artifact@v2
+        with:
+          name: compiler-cargo-docs
+          path: tmp/compiler-cargo-docs
+
       - name: Link Compiler Explorer
         run: yarn link
         working-directory: tmp/compiler-playground-package
@@ -54,6 +77,12 @@ jobs:
           yarn
           yarn link relay-compiler-playground
           yarn build
+        working-directory: website/
+
+     
+      - name: Install and Build
+        run: |
+          cp -r tmp/compiler-cargo-docs build 
         working-directory: website/
 
       - name: Deploy
