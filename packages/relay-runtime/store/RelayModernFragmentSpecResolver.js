@@ -333,6 +333,8 @@ class SelectorResolver {
       this._environment,
       this._missingRequiredFields,
       this._relayResolverErrors,
+      this._errorResponseFields,
+      this._selector.node.metadata?.throwOnFieldError ?? false,
     );
     return this._data;
   }
@@ -454,6 +456,7 @@ class SelectorListResolver {
     const {selectors} = selector;
     while (this._resolvers.length > selectors.length) {
       const resolver = this._resolvers.pop();
+      // $FlowFixMe[incompatible-use]
       resolver.dispose();
     }
     for (let ii = 0; ii < selectors.length; ii++) {

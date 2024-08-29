@@ -4,7 +4,7 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @generated SignedSource<<c9768c7dbf870b21e26aa508af34c942>>
+ * @generated SignedSource<<294590aede42b30342d8c0d2ca299310>>
  */
 
 mod parse;
@@ -125,13 +125,6 @@ async fn relay_resolver_on_interface_no_value_invalid() {
 }
 
 #[tokio::test]
-async fn relay_resolver_on_interface_not_allowed_invalid() {
-    let input = include_str!("parse/fixtures/relay-resolver-on-interface-not-allowed.invalid.js");
-    let expected = include_str!("parse/fixtures/relay-resolver-on-interface-not-allowed.invalid.expected");
-    test_fixture(transform_fixture, file!(), "relay-resolver-on-interface-not-allowed.invalid.js", "parse/fixtures/relay-resolver-on-interface-not-allowed.invalid.expected", input, expected).await;
-}
-
-#[tokio::test]
 async fn relay_resolver_on_type_and_on_interface_invalid() {
     let input = include_str!("parse/fixtures/relay-resolver-on-type-and-on-interface.invalid.js");
     let expected = include_str!("parse/fixtures/relay-resolver-on-type-and-on-interface.invalid.expected");
@@ -150,13 +143,6 @@ async fn relay_resolver_on_type_no_value_invalid() {
     let input = include_str!("parse/fixtures/relay-resolver-on-type-no-value.invalid.js");
     let expected = include_str!("parse/fixtures/relay-resolver-on-type-no-value.invalid.expected");
     test_fixture(transform_fixture, file!(), "relay-resolver-on-type-no-value.invalid.js", "parse/fixtures/relay-resolver-on-type-no-value.invalid.expected", input, expected).await;
-}
-
-#[tokio::test]
-async fn relay_resolver_on_type_not_allowed_invalid() {
-    let input = include_str!("parse/fixtures/relay-resolver-on-type-not-allowed.invalid.js");
-    let expected = include_str!("parse/fixtures/relay-resolver-on-type-not-allowed.invalid.expected");
-    test_fixture(transform_fixture, file!(), "relay-resolver-on-type-not-allowed.invalid.js", "parse/fixtures/relay-resolver-on-type-not-allowed.invalid.expected", input, expected).await;
 }
 
 #[tokio::test]
@@ -195,6 +181,13 @@ async fn relay_resolver_weak_object_with_gibberish_invalid() {
 }
 
 #[tokio::test]
+async fn relay_resolver_weak_object_with_implements() {
+    let input = include_str!("parse/fixtures/relay-resolver-weak-object-with-implements.js");
+    let expected = include_str!("parse/fixtures/relay-resolver-weak-object-with-implements.expected");
+    test_fixture(transform_fixture, file!(), "relay-resolver-weak-object-with-implements.js", "parse/fixtures/relay-resolver-weak-object-with-implements.expected", input, expected).await;
+}
+
+#[tokio::test]
 async fn relay_resolver_with_args() {
     let input = include_str!("parse/fixtures/relay-resolver-with-args.js");
     let expected = include_str!("parse/fixtures/relay-resolver-with-args.expected");
@@ -230,6 +223,13 @@ async fn relay_resolver_with_field_and_fragment_args() {
 }
 
 #[tokio::test]
+async fn relay_resolver_with_field_and_fragment_args_invalid() {
+    let input = include_str!("parse/fixtures/relay-resolver-with-field-and-fragment-args.invalid.js");
+    let expected = include_str!("parse/fixtures/relay-resolver-with-field-and-fragment-args.invalid.expected");
+    test_fixture(transform_fixture, file!(), "relay-resolver-with-field-and-fragment-args.invalid.js", "parse/fixtures/relay-resolver-with-field-and-fragment-args.invalid.expected", input, expected).await;
+}
+
+#[tokio::test]
 async fn relay_resolver_with_field_args() {
     let input = include_str!("parse/fixtures/relay-resolver-with-field-args.js");
     let expected = include_str!("parse/fixtures/relay-resolver-with-field-args.expected");
@@ -251,38 +251,38 @@ async fn relay_resolver_with_fragment_invalid() {
 }
 
 #[tokio::test]
-async fn relay_resolver_with_output_type() {
-    let input = include_str!("parse/fixtures/relay-resolver-with-output-type.js");
-    let expected = include_str!("parse/fixtures/relay-resolver-with-output-type.expected");
-    test_fixture(transform_fixture, file!(), "relay-resolver-with-output-type.js", "parse/fixtures/relay-resolver-with-output-type.expected", input, expected).await;
-}
-
-#[tokio::test]
-async fn strict_flavors_live_resolver_with_root_fragment_invalid() {
-    let input = include_str!("parse/fixtures/strict-flavors-live-resolver-with-root-fragment.invalid.js");
-    let expected = include_str!("parse/fixtures/strict-flavors-live-resolver-with-root-fragment.invalid.expected");
-    test_fixture(transform_fixture, file!(), "strict-flavors-live-resolver-with-root-fragment.invalid.js", "parse/fixtures/strict-flavors-live-resolver-with-root-fragment.invalid.expected", input, expected).await;
-}
-
-#[tokio::test]
-async fn strict_flavors_multiple_errors_invalid() {
-    let input = include_str!("parse/fixtures/strict-flavors-multiple-errors.invalid.js");
-    let expected = include_str!("parse/fixtures/strict-flavors-multiple-errors.invalid.expected");
-    test_fixture(transform_fixture, file!(), "strict-flavors-multiple-errors.invalid.js", "parse/fixtures/strict-flavors-multiple-errors.invalid.expected", input, expected).await;
-}
-
-#[tokio::test]
-async fn strict_flavors_output_type_with_root_fragment_invalid() {
-    let input = include_str!("parse/fixtures/strict-flavors-output-type-with-root-fragment.invalid.js");
-    let expected = include_str!("parse/fixtures/strict-flavors-output-type-with-root-fragment.invalid.expected");
-    test_fixture(transform_fixture, file!(), "strict-flavors-output-type-with-root-fragment.invalid.js", "parse/fixtures/strict-flavors-output-type-with-root-fragment.invalid.expected", input, expected).await;
-}
-
-#[tokio::test]
 async fn terse_relay_resolver() {
     let input = include_str!("parse/fixtures/terse-relay-resolver.js");
     let expected = include_str!("parse/fixtures/terse-relay-resolver.expected");
     test_fixture(transform_fixture, file!(), "terse-relay-resolver.js", "parse/fixtures/terse-relay-resolver.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn terse_relay_resolver_args() {
+    let input = include_str!("parse/fixtures/terse-relay-resolver-args.js");
+    let expected = include_str!("parse/fixtures/terse-relay-resolver-args.expected");
+    test_fixture(transform_fixture, file!(), "terse-relay-resolver-args.js", "parse/fixtures/terse-relay-resolver-args.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn terse_relay_resolver_disallow_non_nullable() {
+    let input = include_str!("parse/fixtures/terse-relay-resolver-disallow-non-nullable.js");
+    let expected = include_str!("parse/fixtures/terse-relay-resolver-disallow-non-nullable.expected");
+    test_fixture(transform_fixture, file!(), "terse-relay-resolver-disallow-non-nullable.js", "parse/fixtures/terse-relay-resolver-disallow-non-nullable.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn terse_relay_resolver_disallow_non_nullable_list() {
+    let input = include_str!("parse/fixtures/terse-relay-resolver-disallow-non-nullable-list.js");
+    let expected = include_str!("parse/fixtures/terse-relay-resolver-disallow-non-nullable-list.expected");
+    test_fixture(transform_fixture, file!(), "terse-relay-resolver-disallow-non-nullable-list.js", "parse/fixtures/terse-relay-resolver-disallow-non-nullable-list.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn terse_relay_resolver_disallow_non_nullable_list_item() {
+    let input = include_str!("parse/fixtures/terse-relay-resolver-disallow-non-nullable-list-item.js");
+    let expected = include_str!("parse/fixtures/terse-relay-resolver-disallow-non-nullable-list-item.expected");
+    test_fixture(transform_fixture, file!(), "terse-relay-resolver-disallow-non-nullable-list-item.js", "parse/fixtures/terse-relay-resolver-disallow-non-nullable-list-item.expected", input, expected).await;
 }
 
 #[tokio::test]
@@ -321,15 +321,8 @@ async fn terse_relay_resolver_non_nullable() {
 }
 
 #[tokio::test]
-async fn terse_relay_resolver_non_nullable_list() {
-    let input = include_str!("parse/fixtures/terse-relay-resolver-non-nullable-list.js");
-    let expected = include_str!("parse/fixtures/terse-relay-resolver-non-nullable-list.expected");
-    test_fixture(transform_fixture, file!(), "terse-relay-resolver-non-nullable-list.js", "parse/fixtures/terse-relay-resolver-non-nullable-list.expected", input, expected).await;
-}
-
-#[tokio::test]
-async fn terse_relay_resolver_non_nullable_list_item() {
-    let input = include_str!("parse/fixtures/terse-relay-resolver-non-nullable-list-item.js");
-    let expected = include_str!("parse/fixtures/terse-relay-resolver-non-nullable-list-item.expected");
-    test_fixture(transform_fixture, file!(), "terse-relay-resolver-non-nullable-list-item.js", "parse/fixtures/terse-relay-resolver-non-nullable-list-item.expected", input, expected).await;
+async fn terse_relay_resolver_semantic_non_null() {
+    let input = include_str!("parse/fixtures/terse-relay-resolver-semantic-non-null.js");
+    let expected = include_str!("parse/fixtures/terse-relay-resolver-semantic-non-null.expected");
+    test_fixture(transform_fixture, file!(), "terse-relay-resolver-semantic-non-null.js", "parse/fixtures/terse-relay-resolver-semantic-non-null.expected", input, expected).await;
 }

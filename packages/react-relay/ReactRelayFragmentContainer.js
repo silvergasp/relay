@@ -51,7 +51,7 @@ function createContainerWithFragments<
   Component: TComponent,
   fragments: FragmentMap,
 ): React.ComponentType<
-  $RelayProps<React$ElementConfig<TComponent>, RelayProp>,
+  $RelayProps<React.ElementConfig<TComponent>, RelayProp>,
 > {
   const containerName = getContainerName(Component);
 
@@ -242,12 +242,14 @@ function createContainerWithFragments<
       // eslint-disable-next-line no-unused-vars
       const {componentRef, __relayContext, __rootIsQueryRenderer, ...props} =
         this.props;
-      return React.createElement(Component, {
-        ...props,
-        ...this.state.data,
-        ref: componentRef,
-        relay: this.state.relayProp,
-      });
+      return (
+        <Component
+          {...props}
+          {...this.state.data}
+          ref={componentRef}
+          relay={this.state.relayProp}
+        />
+      );
     }
   };
 }
@@ -273,7 +275,7 @@ function createContainer<
   Component: TComponent,
   fragmentSpec: GeneratedNodeMap,
 ): React.AbstractComponent<
-  $RelayProps<React$ElementConfig<TComponent>, RelayProp>,
+  $RelayProps<React.ElementConfig<TComponent>, RelayProp>,
   Instance,
 > {
   // $FlowFixMe[incompatible-return]

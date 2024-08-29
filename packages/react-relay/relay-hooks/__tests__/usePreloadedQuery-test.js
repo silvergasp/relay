@@ -11,12 +11,11 @@
 
 'use strict';
 
-import type {Sink} from '../../../relay-runtime/network/RelayObservable';
 import type {PreloadableConcreteRequest} from '../EntryPointTypes.flow';
 import type {usePreloadedQueryTestQuery} from './__generated__/usePreloadedQueryTestQuery.graphql';
+import type {Sink} from 'relay-runtime';
 import type {GraphQLResponse} from 'relay-runtime/network/RelayNetworkTypes';
 
-const useFragmentInternal_EXPERIMENTAL = require('../experimental/useFragmentInternal_EXPERIMENTAL');
 const {loadQuery} = require('../loadQuery');
 const preloadQuery_DEPRECATED = require('../preloadQuery_DEPRECATED');
 const RelayEnvironmentProvider = require('../RelayEnvironmentProvider');
@@ -33,6 +32,7 @@ const {
   graphql,
 } = require('relay-runtime');
 const {createMockEnvironment} = require('relay-test-utils');
+const {skipIf} = require('relay-test-utils-internal');
 const warning = require('warning');
 
 jest.mock('warning');
@@ -115,26 +115,8 @@ afterAll(() => {
   jest.clearAllMocks();
 });
 
-describe.each([
-  ['With legacy useFragmentNode', null],
-  [
-    'With new `useFragmentInternal` implementation',
-    useFragmentInternal_EXPERIMENTAL,
-  ],
-])('usePreloadedQuery (%s)', (_hookName, useFragmentInternal) => {
+describe('usePreloadedQuery', () => {
   beforeEach(() => {
-    if (useFragmentInternal != null) {
-      jest.mock('../HooksImplementation', () => {
-        return {
-          get() {
-            return {
-              useFragment__internal: useFragmentInternal,
-            };
-          },
-        };
-      });
-    }
-
     dataSource = undefined;
     // $FlowFixMe[missing-local-annot] error found when enabling Flow LTI mode
     fetch = jest.fn((_query, _variables, _cacheConfig) =>
@@ -609,24 +591,27 @@ describe.each([
           data = usePreloadedQuery(query, props.prefetched);
           return data?.node?.name ?? 'MISSING NAME';
         }
-        const renderer = TestRenderer.create(
-          <RelayEnvironmentProvider environment={environment}>
-            <React.Suspense fallback="Fallback">
-              <Component prefetched={prefetched} />
-            </React.Suspense>
-          </RelayEnvironmentProvider>,
-        );
+        let renderer;
+        TestRenderer.act(() => {
+          renderer = TestRenderer.create(
+            <RelayEnvironmentProvider environment={environment}>
+              <React.Suspense fallback="Fallback">
+                <Component prefetched={prefetched} />
+              </React.Suspense>
+            </RelayEnvironmentProvider>,
+          );
+        });
         // When the query AST is not available, we are unable to detect the promise
         // for that query in flight.
         // This isn't really a problem in practice because by the time the component
         // renders the ast /must/ have already been downloaded
         // TODO(T85673186): Detect raw network requests in flight to suspend on.
         PreloadableQueryRegistry.set(ID, query);
-        expect(renderer.toJSON()).toEqual('MISSING NAME');
+        expect(renderer?.toJSON()).toEqual('MISSING NAME');
         expect(data).toEqual({node: undefined});
 
         TestRenderer.act(() => jest.runAllImmediates());
-        expect(renderer.toJSON()).toEqual('MISSING NAME');
+        expect(renderer?.toJSON()).toEqual('MISSING NAME');
         expect(data).toEqual({node: undefined});
 
         expect(dataSource).toBeDefined();
@@ -634,7 +619,7 @@ describe.each([
           dataSource.next(response);
         }
         TestRenderer.act(() => jest.runAllImmediates());
-        expect(renderer.toJSON()).toEqual('Zuck');
+        expect(renderer?.toJSON()).toEqual('Zuck');
         expect(data).toEqual({
           node: {
             id: '4',
@@ -659,15 +644,18 @@ describe.each([
           data = usePreloadedQuery(query, props.prefetched);
           return data.node?.name;
         }
-        const renderer = TestRenderer.create(
-          <RelayEnvironmentProvider environment={environment}>
-            <React.Suspense fallback="Fallback">
-              <Component prefetched={prefetched} />
-            </React.Suspense>
-          </RelayEnvironmentProvider>,
-        );
+        let renderer;
+        TestRenderer.act(() => {
+          renderer = TestRenderer.create(
+            <RelayEnvironmentProvider environment={environment}>
+              <React.Suspense fallback="Fallback">
+                <Component prefetched={prefetched} />
+              </React.Suspense>
+            </RelayEnvironmentProvider>,
+          );
+        });
 
-        expect(renderer.toJSON()).toEqual('Zuck');
+        expect(renderer?.toJSON()).toEqual('Zuck');
         expect(data).toEqual({
           node: {
             id: '4',
@@ -692,17 +680,20 @@ describe.each([
           data = usePreloadedQuery(query, props.prefetched);
           return data.node?.name;
         }
-        const renderer = TestRenderer.create(
-          <RelayEnvironmentProvider environment={environment}>
-            <ErrorBoundary fallback="Error Boundary">
-              <React.Suspense fallback="Fallback">
-                <Component prefetched={prefetched} />
-              </React.Suspense>
-            </ErrorBoundary>
-          </RelayEnvironmentProvider>,
-        );
+        let renderer;
+        TestRenderer.act(() => {
+          renderer = TestRenderer.create(
+            <RelayEnvironmentProvider environment={environment}>
+              <ErrorBoundary fallback="Error Boundary">
+                <React.Suspense fallback="Fallback">
+                  <Component prefetched={prefetched} />
+                </React.Suspense>
+              </ErrorBoundary>
+            </RelayEnvironmentProvider>,
+          );
+        });
 
-        expect(renderer.toJSON()).toEqual('Error Boundary');
+        expect(renderer?.toJSON()).toEqual('Error Boundary');
       });
     });
 
@@ -723,15 +714,18 @@ describe.each([
             data = usePreloadedQuery(query, props.prefetched);
             return data.node?.name;
           }
-          const renderer = TestRenderer.create(
-            <RelayEnvironmentProvider environment={environment}>
-              <React.Suspense fallback="Fallback">
-                <Component prefetched={prefetched} />
-              </React.Suspense>
-            </RelayEnvironmentProvider>,
-          );
+          let renderer;
+          TestRenderer.act(() => {
+            renderer = TestRenderer.create(
+              <RelayEnvironmentProvider environment={environment}>
+                <React.Suspense fallback="Fallback">
+                  <Component prefetched={prefetched} />
+                </React.Suspense>
+              </RelayEnvironmentProvider>,
+            );
+          });
 
-          expect(renderer.toJSON()).toEqual('Zuck');
+          expect(renderer?.toJSON()).toEqual('Zuck');
           expect(data).toEqual({
             node: {
               id: '4',
@@ -754,17 +748,20 @@ describe.each([
             data = usePreloadedQuery(query, props.prefetched);
             return data.node?.name;
           }
-          const renderer = TestRenderer.create(
-            <RelayEnvironmentProvider environment={environment}>
-              <ErrorBoundary fallback="Error Boundary">
-                <React.Suspense fallback="Fallback">
-                  <Component prefetched={prefetched} />
-                </React.Suspense>
-              </ErrorBoundary>
-            </RelayEnvironmentProvider>,
-          );
+          let renderer;
+          TestRenderer.act(() => {
+            renderer = TestRenderer.create(
+              <RelayEnvironmentProvider environment={environment}>
+                <ErrorBoundary fallback="Error Boundary">
+                  <React.Suspense fallback="Fallback">
+                    <Component prefetched={prefetched} />
+                  </React.Suspense>
+                </ErrorBoundary>
+              </RelayEnvironmentProvider>,
+            );
+          });
 
-          expect(renderer.toJSON()).toEqual('Error Boundary');
+          expect(renderer?.toJSON()).toEqual('Error Boundary');
         });
       });
 
@@ -780,14 +777,17 @@ describe.each([
             data = usePreloadedQuery(query, props.prefetched);
             return data.node?.name;
           }
-          const renderer = TestRenderer.create(
-            <RelayEnvironmentProvider environment={environment}>
-              <React.Suspense fallback="Fallback">
-                <Component prefetched={prefetched} />
-              </React.Suspense>
-            </RelayEnvironmentProvider>,
-          );
-          expect(renderer.toJSON()).toEqual('Fallback');
+          let renderer;
+          TestRenderer.act(() => {
+            renderer = TestRenderer.create(
+              <RelayEnvironmentProvider environment={environment}>
+                <React.Suspense fallback="Fallback">
+                  <Component prefetched={prefetched} />
+                </React.Suspense>
+              </RelayEnvironmentProvider>,
+            );
+          });
+          expect(renderer?.toJSON()).toEqual('Fallback');
           expect(data).toBe(undefined);
 
           if (dataSource) {
@@ -795,7 +795,7 @@ describe.each([
           }
           TestRenderer.act(() => jest.runAllImmediates());
 
-          expect(renderer.toJSON()).toEqual('Zuck');
+          expect(renderer?.toJSON()).toEqual('Zuck');
           expect(data).toEqual({
             node: {
               id: '4',
@@ -814,16 +814,20 @@ describe.each([
             data = usePreloadedQuery(query, props.prefetched);
             return data.node?.name;
           }
-          const renderer = TestRenderer.create(
-            <RelayEnvironmentProvider environment={environment}>
-              <ErrorBoundary fallback="Error Boundary">
-                <React.Suspense fallback="Fallback">
-                  <Component prefetched={prefetched} />
-                </React.Suspense>
-              </ErrorBoundary>
-            </RelayEnvironmentProvider>,
-          );
-          expect(renderer.toJSON()).toEqual('Fallback');
+
+          let renderer;
+          TestRenderer.act(() => {
+            renderer = TestRenderer.create(
+              <RelayEnvironmentProvider environment={environment}>
+                <ErrorBoundary fallback="Error Boundary">
+                  <React.Suspense fallback="Fallback">
+                    <Component prefetched={prefetched} />
+                  </React.Suspense>
+                </ErrorBoundary>
+              </RelayEnvironmentProvider>,
+            );
+          });
+          expect(renderer?.toJSON()).toEqual('Fallback');
           expect(data).toBe(undefined);
 
           if (dataSource) {
@@ -831,7 +835,7 @@ describe.each([
           }
           TestRenderer.act(() => jest.runAllImmediates());
 
-          expect(renderer.toJSON()).toEqual('Error Boundary');
+          expect(renderer?.toJSON()).toEqual('Error Boundary');
         });
       });
     });
@@ -865,15 +869,18 @@ describe.each([
             data = usePreloadedQuery(query, props.prefetched);
             return data.node?.name;
           }
-          const renderer = TestRenderer.create(
-            <RelayEnvironmentProvider environment={environment}>
-              <React.Suspense fallback="Fallback">
-                <Component prefetched={prefetched} />
-              </React.Suspense>
-            </RelayEnvironmentProvider>,
-          );
+          let renderer;
+          TestRenderer.act(() => {
+            renderer = TestRenderer.create(
+              <RelayEnvironmentProvider environment={environment}>
+                <React.Suspense fallback="Fallback">
+                  <Component prefetched={prefetched} />
+                </React.Suspense>
+              </RelayEnvironmentProvider>,
+            );
+          });
 
-          expect(renderer.toJSON()).toEqual('Zuck');
+          expect(renderer?.toJSON()).toEqual('Zuck');
           expect(data).toEqual({
             node: {
               id: '4',
@@ -900,17 +907,20 @@ describe.each([
             data = usePreloadedQuery(query, props.prefetched);
             return data.node?.name;
           }
-          const renderer = TestRenderer.create(
-            <RelayEnvironmentProvider environment={environment}>
-              <ErrorBoundary fallback="Error Boundary">
-                <React.Suspense fallback="Fallback">
-                  <Component prefetched={prefetched} />
-                </React.Suspense>
-              </ErrorBoundary>
-            </RelayEnvironmentProvider>,
-          );
+          let renderer;
+          TestRenderer.act(() => {
+            renderer = TestRenderer.create(
+              <RelayEnvironmentProvider environment={environment}>
+                <ErrorBoundary fallback="Error Boundary">
+                  <React.Suspense fallback="Fallback">
+                    <Component prefetched={prefetched} />
+                  </React.Suspense>
+                </ErrorBoundary>
+              </RelayEnvironmentProvider>,
+            );
+          });
 
-          expect(renderer.toJSON()).toEqual('Error Boundary');
+          expect(renderer?.toJSON()).toEqual('Error Boundary');
         });
       });
 
@@ -930,14 +940,17 @@ describe.each([
             data = usePreloadedQuery(query, props.prefetched);
             return data.node?.name;
           }
-          const renderer = TestRenderer.create(
-            <RelayEnvironmentProvider environment={environment}>
-              <React.Suspense fallback="Fallback">
-                <Component prefetched={prefetched} />
-              </React.Suspense>
-            </RelayEnvironmentProvider>,
-          );
-          expect(renderer.toJSON()).toEqual('Fallback');
+          let renderer;
+          TestRenderer.act(() => {
+            renderer = TestRenderer.create(
+              <RelayEnvironmentProvider environment={environment}>
+                <React.Suspense fallback="Fallback">
+                  <Component prefetched={prefetched} />
+                </React.Suspense>
+              </RelayEnvironmentProvider>,
+            );
+          });
+          expect(renderer?.toJSON()).toEqual('Fallback');
           expect(data).toBe(undefined);
 
           if (dataSource) {
@@ -945,7 +958,7 @@ describe.each([
           }
           TestRenderer.act(() => jest.runAllImmediates());
 
-          expect(renderer.toJSON()).toEqual('Zuck');
+          expect(renderer?.toJSON()).toEqual('Zuck');
           expect(data).toEqual({
             node: {
               id: '4',
@@ -968,16 +981,19 @@ describe.each([
             data = usePreloadedQuery(query, props.prefetched);
             return data.node?.name;
           }
-          const renderer = TestRenderer.create(
-            <RelayEnvironmentProvider environment={environment}>
-              <ErrorBoundary fallback="Error Boundary">
-                <React.Suspense fallback="Fallback">
-                  <Component prefetched={prefetched} />
-                </React.Suspense>
-              </ErrorBoundary>
-            </RelayEnvironmentProvider>,
-          );
-          expect(renderer.toJSON()).toEqual('Fallback');
+          let renderer;
+          TestRenderer.act(() => {
+            renderer = TestRenderer.create(
+              <RelayEnvironmentProvider environment={environment}>
+                <ErrorBoundary fallback="Error Boundary">
+                  <React.Suspense fallback="Fallback">
+                    <Component prefetched={prefetched} />
+                  </React.Suspense>
+                </ErrorBoundary>
+              </RelayEnvironmentProvider>,
+            );
+          });
+          expect(renderer?.toJSON()).toEqual('Fallback');
           expect(data).toBe(undefined);
 
           if (dataSource) {
@@ -985,7 +1001,7 @@ describe.each([
           }
           TestRenderer.act(() => jest.runAllImmediates());
 
-          expect(renderer.toJSON()).toEqual('Error Boundary');
+          expect(renderer?.toJSON()).toEqual('Error Boundary');
         });
       });
     });
@@ -1020,15 +1036,18 @@ describe.each([
           data = usePreloadedQuery(query, props.prefetched);
           return data.node?.name;
         }
-        const renderer = TestRenderer.create(
-          <RelayEnvironmentProvider environment={altEnvironment}>
-            <React.Suspense fallback="Fallback">
-              <Component prefetched={prefetched} />
-            </React.Suspense>
-          </RelayEnvironmentProvider>,
-        );
+        let renderer;
+        TestRenderer.act(() => {
+          renderer = TestRenderer.create(
+            <RelayEnvironmentProvider environment={altEnvironment}>
+              <React.Suspense fallback="Fallback">
+                <Component prefetched={prefetched} />
+              </React.Suspense>
+            </RelayEnvironmentProvider>,
+          );
+        });
 
-        expect(renderer.toJSON()).toEqual('Fallback');
+        expect(renderer?.toJSON()).toEqual('Fallback');
         expect(altFetch).toHaveBeenCalledTimes(1);
         expect(altDataSource).toBeDefined();
         if (altDataSource) {
@@ -1036,50 +1055,60 @@ describe.each([
         }
 
         TestRenderer.act(() => jest.runAllImmediates());
-        expect(renderer.toJSON()).toEqual('Zuck');
+        expect(renderer?.toJSON()).toEqual('Zuck');
       });
     });
 
     describe('when loadQuery is passed a preloadedQuery that was disposed', () => {
-      it('warns that the preloadedQuery has already been disposed', () => {
-        const expectWarningMessage = expect.stringMatching(
-          /^usePreloadedQuery\(\): Expected preloadedQuery to not be disposed/,
-        );
-        const prefetched = loadQuery(environment, preloadableConcreteRequest, {
-          id: '1',
-        });
-
-        function Component(props: any) {
-          const data = usePreloadedQuery(query, props.prefetched);
-          return data?.node?.name ?? 'MISSING NAME';
-        }
-
-        const render = () => {
-          TestRenderer.create(
-            <RelayEnvironmentProvider environment={environment}>
-              <React.Suspense fallback="Fallback">
-                <Component prefetched={prefetched} />
-              </React.Suspense>
-            </RelayEnvironmentProvider>,
+      skipIf(
+        process.env.OSS,
+        'warns that the preloadedQuery has already been disposed',
+        () => {
+          const expectWarningMessage = expect.stringMatching(
+            /^usePreloadedQuery\(\): Expected preloadedQuery to not be disposed/,
           );
-          TestRenderer.act(() => jest.runAllImmediates());
-        };
+          const prefetched = loadQuery(
+            environment,
+            preloadableConcreteRequest,
+            {
+              id: '1',
+            },
+          );
 
-        render();
-        expect(warning).toBeCalledTimes(2);
-        expect(warning).toHaveBeenLastCalledWith(
-          true, // invariant holds
-          expectWarningMessage,
-        );
+          function Component(props: any) {
+            const data = usePreloadedQuery(query, props.prefetched);
+            return data?.node?.name ?? 'MISSING NAME';
+          }
 
-        prefetched.dispose();
-        render();
-        expect(warning).toBeCalledTimes(3);
-        expect(warning).toHaveBeenLastCalledWith(
-          false, // invariant broken
-          expectWarningMessage,
-        );
-      });
+          const render = () => {
+            TestRenderer.act(() => {
+              TestRenderer.create(
+                <RelayEnvironmentProvider environment={environment}>
+                  <React.Suspense fallback="Fallback">
+                    <Component prefetched={prefetched} />
+                  </React.Suspense>
+                </RelayEnvironmentProvider>,
+              );
+              jest.runAllImmediates();
+            });
+          };
+
+          render();
+          expect(warning).toBeCalledTimes(2);
+          expect(warning).toHaveBeenLastCalledWith(
+            true, // invariant holds
+            expectWarningMessage,
+          );
+
+          prefetched.dispose();
+          render();
+          expect(warning).toBeCalledTimes(3);
+          expect(warning).toHaveBeenLastCalledWith(
+            false, // invariant broken
+            expectWarningMessage,
+          );
+        },
+      );
     });
 
     describe('refetching', () => {

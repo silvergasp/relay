@@ -56,8 +56,8 @@ const generateID = require('../util/generateID');
 const getOperation = require('../util/getOperation');
 const RelayError = require('../util/RelayError');
 const RelayFeatureFlags = require('../util/RelayFeatureFlags');
-const stableCopy = require('../util/stableCopy');
-const withDuration = require('../util/withDuration');
+const {stableCopy} = require('../util/stableCopy');
+const withStartAndDuration = require('../util/withStartAndDuration');
 const {generateClientID, generateUniqueClientID} = require('./ClientID');
 const {getLocalVariables} = require('./RelayConcreteVariables');
 const RelayModernRecord = require('./RelayModernRecord');
@@ -211,6 +211,19 @@ class Executor<TMutation: MutationParameters> {
     this._normalizeResponse = normalizeResponse;
 
     const id = this._nextSubscriptionId++;
+
+    if (
+      RelayFeatureFlags.PROCESS_OPTIMISTIC_UPDATE_BEFORE_SUBSCRIPTION &&
+      optimisticConfig != null
+    ) {
+      this._processOptimisticResponse(
+        optimisticConfig.response != null
+          ? {data: optimisticConfig.response}
+          : null,
+        optimisticConfig.updater,
+        false,
+      );
+    }
     source.subscribe({
       complete: () => this._complete(id),
       error: error => this._error(error),
@@ -233,7 +246,10 @@ class Executor<TMutation: MutationParameters> {
       },
     });
 
-    if (optimisticConfig != null) {
+    if (
+      !RelayFeatureFlags.PROCESS_OPTIMISTIC_UPDATE_BEFORE_SUBSCRIPTION &&
+      optimisticConfig != null
+    ) {
       this._processOptimisticResponse(
         optimisticConfig.response != null
           ? {data: optimisticConfig.response}
@@ -359,15 +375,19 @@ class Executor<TMutation: MutationParameters> {
   // Handle a raw GraphQL response.
   _next(_id: number, response: GraphQLResponse): void {
     this._schedule(() => {
-      const [duration] = withDuration(() => {
-        this._handleNext(response);
-        this._maybeCompleteSubscriptionOperationTracking();
-      });
       this._log({
-        name: 'execute.next',
+        name: 'execute.next.start',
         executeId: this._executeId,
         response,
-        duration,
+        operation: this._operation,
+      });
+      this._handleNext(response);
+      this._maybeCompleteSubscriptionOperationTracking();
+      this._log({
+        name: 'execute.next.end',
+        executeId: this._executeId,
+        response,
+        operation: this._operation,
       });
     });
   }
@@ -925,7 +945,7 @@ class Executor<TMutation: MutationParameters> {
                       const shouldScheduleAsyncStoreUpdate =
                         batchAsyncModuleUpdatesFN != null &&
                         this._pendingModulePayloadsCount > 1;
-                      const [duration] = withDuration(() => {
+                      const [_, duration] = withStartAndDuration(() => {
                         this._handleFollowupPayload(followupPayload, operation);
                         // OK: always have to run after an async module import resolves
                         if (shouldScheduleAsyncStoreUpdate) {

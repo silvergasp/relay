@@ -8,17 +8,19 @@
 use common::escalate_and_check;
 use common::CriticalDiagnostics;
 use common::DiagnosticsResult;
-use common::FeatureFlags;
 use common::StableDiagnostics;
 use common::WithDiagnostics;
 use errors::try_all;
 use graphql_ir::Program;
 use relay_config::ProjectConfig;
 use relay_transforms::disallow_circular_no_inline_fragments;
+use relay_transforms::disallow_readtime_features_in_mutations;
+use relay_transforms::disallow_required_on_non_null_field;
 use relay_transforms::disallow_reserved_aliases;
 use relay_transforms::disallow_typename_on_root;
 use relay_transforms::validate_assignable_directive;
 use relay_transforms::validate_connections;
+use relay_transforms::validate_fragment_alias_conflict;
 use relay_transforms::validate_global_variable_names;
 use relay_transforms::validate_module_names;
 use relay_transforms::validate_no_double_underscore_alias;
@@ -33,7 +35,31 @@ use relay_transforms::validate_updatable_directive;
 use relay_transforms::validate_updatable_fragment_spread;
 
 pub type AdditionalValidations =
-    Box<dyn Fn(&Program, &FeatureFlags) -> DiagnosticsResult<()> + Sync + Send>;
+    Box<dyn Fn(&Program, &ProjectConfig) -> DiagnosticsResult<()> + Sync + Send>;
+
+/// Perform validations on the program schema after it has been transformed
+/// for the reader.
+pub fn validate_reader(
+    program: &Program,
+    project_config: &ProjectConfig,
+    additional_validations: &Option<AdditionalValidations>,
+) -> DiagnosticsResult<WithDiagnostics<()>> {
+    let output = try_all(vec![
+        disallow_required_on_non_null_field(
+            program,
+            project_config
+                .typegen_config
+                .experimental_emit_semantic_nullability_types,
+        ),
+        if let Some(ref validate) = additional_validations {
+            validate(program, project_config)
+        } else {
+            Ok(())
+        },
+    ]);
+
+    transform_errors(output, project_config)
+}
 
 pub fn validate(
     program: &Program,
@@ -54,7 +80,7 @@ pub fn validate(
         disallow_typename_on_root(program),
         validate_static_args(program),
         if let Some(ref validate) = additional_validations {
-            validate(program, &project_config.feature_flags)
+            validate(program, project_config)
         } else {
             Ok(())
         },
@@ -67,8 +93,26 @@ pub fn validate(
         } else {
             Ok(())
         },
+        disallow_readtime_features_in_mutations(
+            program,
+            &project_config
+                .feature_flags
+                .allow_resolvers_in_mutation_response,
+            &project_config
+                .feature_flags
+                .allow_required_in_mutation_response,
+            project_config.feature_flags.enable_relay_resolver_mutations,
+        ),
+        validate_fragment_alias_conflict(program),
     ]);
 
+    transform_errors(output, project_config)
+}
+
+fn transform_errors(
+    output: Result<Vec<()>, Vec<common::Diagnostic>>,
+    project_config: &ProjectConfig,
+) -> Result<WithDiagnostics<()>, Vec<common::Diagnostic>> {
     match output {
         Ok(_) => Ok(WithDiagnostics {
             item: (),

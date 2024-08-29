@@ -14,6 +14,7 @@ use std::sync::Arc;
 use std::vec;
 
 use async_trait::async_trait;
+use common::DiagnosticsResult;
 use common::FeatureFlags;
 use common::Rollout;
 use common::ScalarName;
@@ -25,14 +26,12 @@ use graphql_ir::Program;
 use indexmap::IndexMap;
 use intern::string_key::StringKey;
 use js_config_loader::LoaderSource;
-use log::warn;
 use persist_query::PersistError;
 use rayon::prelude::*;
 use regex::Regex;
-use relay_config::CustomScalarType;
+use relay_config::CustomType;
 use relay_config::DiagnosticReportConfig;
 pub use relay_config::ExtraArtifactsConfig;
-use relay_config::FlowTypegenConfig;
 use relay_config::JsModuleFormat;
 pub use relay_config::LocalPersistConfig;
 use relay_config::ModuleImportConfig;
@@ -45,7 +44,12 @@ use relay_config::SchemaConfig;
 pub use relay_config::SchemaLocation;
 use relay_config::TypegenConfig;
 pub use relay_config::TypegenLanguage;
+use relay_docblock::DocblockIr;
+use relay_saved_state_loader::SavedStateLoader;
 use relay_transforms::CustomTransformsConfig;
+use schemars::gen::SchemaSettings;
+use schemars::gen::{self};
+use schemars::JsonSchema;
 use serde::de::Error as DeError;
 use serde::Deserialize;
 use serde::Deserializer;
@@ -61,13 +65,15 @@ use crate::build_project::generate_extra_artifacts::GenerateExtraArtifactsFn;
 use crate::build_project::get_artifacts_file_hash_map::GetArtifactsFileHashMapFn;
 use crate::build_project::AdditionalValidations;
 use crate::compiler_state::CompilerState;
+use crate::compiler_state::DeserializableProjectSet;
 use crate::compiler_state::ProjectSet;
 use crate::errors::ConfigValidationError;
 use crate::errors::Error;
 use crate::errors::Result;
-use crate::saved_state::SavedStateLoader;
+use crate::source_control_for_root;
 use crate::status_reporter::ConsoleStatusReporter;
 use crate::status_reporter::StatusReporter;
+use crate::GraphQLAsts;
 
 type FnvIndexMap<K, V> = IndexMap<K, V, FnvBuildHasher>;
 
@@ -83,6 +89,26 @@ type OperationPersisterCreator =
 type UpdateCompilerStateFromSavedState =
     Option<Box<dyn Fn(&mut CompilerState, &Config) + Send + Sync>>;
 
+type ShouldExtractFullSource = Box<dyn Fn(&str) -> bool + Send + Sync>;
+
+type GenerateVirtualIdFieldName =
+    Box<dyn Fn(&ProjectConfig, &OperationDefinition, &Program) -> Option<StringKey> + Send + Sync>;
+
+type CustomExtractRelayResolvers = Box<
+    dyn Fn(
+            ProjectName,
+            &FnvIndexMap<ScalarName, CustomType>,
+            &CompilerState,
+            Option<&GraphQLAsts>,
+        ) -> DiagnosticsResult<(Vec<DocblockIr>, Vec<DocblockIr>)>
+        // (Types, Fields)
+        + Send
+        + Sync,
+>;
+
+type CustomOverrideSchemaDeterminator =
+    Box<dyn Fn(&ProjectConfig, &OperationDefinition) -> Option<String> + Send + Sync>;
+
 /// The full compiler config. This is a combination of:
 /// - the configuration file
 /// - the absolute path to the root of the compiled projects
@@ -97,6 +123,10 @@ pub struct Config {
     pub root_dir: PathBuf,
     pub sources: FnvIndexMap<PathBuf, ProjectSet>,
     pub excludes: Vec<String>,
+    /// Some projects may need to include extra source directories without being
+    /// affected by exclusion globs from the `excludes` config (e.g. generated
+    /// directories).
+    pub generated_sources: FnvIndexMap<PathBuf, ProjectSet>,
     pub projects: FnvIndexMap<ProjectName, ProjectConfig>,
     pub header: Vec<String>,
     pub codegen_command: Option<String>,
@@ -104,13 +134,7 @@ pub struct Config {
     pub load_saved_state_file: Option<PathBuf>,
     /// Function to generate extra
     pub generate_extra_artifacts: Option<GenerateExtraArtifactsFn>,
-    pub generate_virtual_id_file_name: Option<
-        Box<
-            dyn Fn(&ProjectConfig, &OperationDefinition, &Program) -> Option<StringKey>
-                + Send
-                + Sync,
-        >,
-    >,
+    pub generate_virtual_id_file_name: Option<GenerateVirtualIdFieldName>,
 
     /// Path to which to write the output of the compilation
     pub artifact_writer: Box<dyn ArtifactWriter + Send + Sync>,
@@ -151,8 +175,7 @@ pub struct Config {
     /// and after each major transformation step (common, operations, etc)
     /// in the `apply_transforms(...)`.
     pub custom_transforms: Option<CustomTransformsConfig>,
-    pub custom_override_schema_determinator:
-        Option<Box<dyn Fn(&OperationDefinition) -> Option<String> + Send + Sync>>,
+    pub custom_override_schema_determinator: Option<CustomOverrideSchemaDeterminator>,
     pub export_persisted_query_ids_to_file: Option<PathBuf>,
 
     /// The async function is called before the compiler connects to the file
@@ -161,6 +184,15 @@ pub struct Config {
 
     /// Runs in `try_saved_state` when the compiler state is initialized from saved state.
     pub update_compiler_state_from_saved_state: UpdateCompilerStateFromSavedState,
+
+    // Allow incremental build for some schema changes
+    pub has_schema_change_incremental_build: bool,
+
+    /// A custom function to extract resolver Dockblock IRs from sources
+    pub custom_extract_relay_resolvers: Option<CustomExtractRelayResolvers>,
+
+    /// A function to determine if full file source should be extracted instead of docblock
+    pub should_extract_full_source: Option<ShouldExtractFullSource>,
 }
 
 pub enum FileSourceKind {
@@ -240,19 +272,19 @@ impl Config {
             Ok(None) => Err(Error::ConfigError {
                 details: format!(
                     r#"
-Configuration for Relay compiler not found.
+ Configuration for Relay compiler not found.
 
-Please make sure that the configuration file is created in {}.
+ Please make sure that the configuration file is created in {}.
 
-You can also pass the path to the configuration file as `relay-compiler ./path-to-config/relay.json`.
+ You can also pass the path to the configuration file as `relay-compiler ./path-to-config/relay.json`.
 
-Example file:
-{{
-  "src": "./src",
-  "schema": "./path-to/schema.graphql",
-  "language": "javascript"
-}}
-"#,
+ Example file:
+ {{
+   "src": "./src",
+   "schema": "./path-to/schema.graphql",
+   "language": "javascript"
+ }}
+ "#,
                     match loaders_sources.len() {
                         1 => loaders_sources[0].to_string(),
                         2 => format!("{} or {}", loaders_sources[0], loaders_sources[1]),
@@ -396,7 +428,13 @@ Example file:
 
         let config = Self {
             name: config_file.name,
-            artifact_writer: Box::new(ArtifactFileWriter::new(None, root_dir.clone())),
+            artifact_writer: Box::new(ArtifactFileWriter::new(
+                match config_file.no_source_control {
+                    Some(true) => None,
+                    _ => source_control_for_root(&root_dir),
+                },
+                root_dir.clone(),
+            )),
             status_reporter: Box::new(ConsoleStatusReporter::new(
                 root_dir.clone(),
                 is_multi_project,
@@ -404,6 +442,7 @@ Example file:
             root_dir,
             sources: config_file.sources,
             excludes: config_file.excludes,
+            generated_sources: config_file.generated_sources,
             projects,
             header: config_file.header,
             codegen_command: config_file.codegen_command,
@@ -426,6 +465,9 @@ Example file:
             export_persisted_query_ids_to_file: None,
             initialize_resources: None,
             update_compiler_state_from_saved_state: None,
+            has_schema_change_incremental_build: false,
+            custom_extract_relay_resolvers: None,
+            should_extract_full_source: None,
         };
 
         let mut validation_errors = Vec::new();
@@ -559,6 +601,7 @@ impl fmt::Debug for Config {
             root_dir,
             sources,
             excludes,
+            generated_sources,
             compile_everything,
             repersist_operations,
             projects,
@@ -583,6 +626,7 @@ impl fmt::Debug for Config {
             .field("root_dir", root_dir)
             .field("sources", sources)
             .field("excludes", excludes)
+            .field("generated_sources", generated_sources)
             .field("compile_everything", compile_everything)
             .field("repersist_operations", repersist_operations)
             .field("projects", projects)
@@ -620,9 +664,13 @@ fn get_default_excludes() -> Vec<String> {
 }
 
 /// Schema of the compiler configuration JSON file.
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct MultiProjectConfigFile {
+pub struct MultiProjectConfigFile {
+    /// The user may hard-code the JSON Schema for their version of the config.
+    #[serde(rename = "$schema")]
+    json_schema: Option<String>,
+
     /// Optional name for this config, might be used for logging or custom extra
     /// artifact generator code.
     #[serde(default)]
@@ -642,12 +690,17 @@ struct MultiProjectConfigFile {
     /// A mapping from directory paths (relative to the root) to a source set.
     /// If a path is a subdirectory of another path, the more specific path
     /// wins.
-    sources: IndexMap<PathBuf, ProjectSet, fnv::FnvBuildHasher>,
+    #[schemars(with = "FnvIndexMap<PathBuf, DeserializableProjectSet>")]
+    sources: FnvIndexMap<PathBuf, ProjectSet>,
 
     /// Glob patterns that should not be part of the sources even if they are
     /// in the source set directories.
     #[serde(default = "get_default_excludes")]
     excludes: Vec<String>,
+
+    /// Similar to sources but not affected by excludes.
+    #[serde(default)]
+    generated_sources: FnvIndexMap<PathBuf, ProjectSet>,
 
     /// Configuration of projects to compile.
     projects: FnvIndexMap<ProjectName, ConfigFileProject>,
@@ -656,15 +709,23 @@ struct MultiProjectConfigFile {
     feature_flags: FeatureFlags,
 
     /// Watchman saved state config.
+    #[schemars(with = "Option<ScmAwareClockDataJsonSchemaDef>")]
     saved_state_config: Option<ScmAwareClockData>,
 
     /// Then name of the global __DEV__ variable to use in generated artifacts
     is_dev_variable_name: Option<String>,
+
+    /// Opt out of source control checks/integration.
+    no_source_control: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase", default)]
 pub struct SingleProjectConfigFile {
+    /// The user may hard-code the JSON Schema for their version of the config.
+    #[serde(rename = "$schema")]
+    pub json_schema: Option<String>,
+
     #[serde(skip)]
     pub project_name: ProjectName,
 
@@ -674,17 +735,9 @@ pub struct SingleProjectConfigFile {
     /// Root directory of application code
     pub src: PathBuf,
 
-    /// A specific directory to output all artifacts to. When enabling this '
+    /// A specific directory to output all artifacts to. When enabling this
     /// the babel plugin needs `artifactDirectory` set as well.
     pub artifact_directory: Option<PathBuf>,
-
-    /// \[DEPRECATED\] This is deprecated field, we're not using it in the V13.
-    /// Adding to the config, to show the warning, and not a parse error.
-    pub include: Vec<String>,
-
-    /// \[DEPRECATED\] This is deprecated field, we're not using it in the V13.
-    /// Adding to the config, to show the warning, and not a parse error.
-    pub extensions: Vec<String>,
 
     /// Directories to ignore under src
     /// default: ['**/node_modules/**', '**/__mocks__/**', '**/__generated__/**'],
@@ -694,21 +747,8 @@ pub struct SingleProjectConfigFile {
     /// List of directories with schema extensions.
     pub schema_extensions: Vec<PathBuf>,
 
-    /// This option controls whether or not a catch-all entry is added to enum type definitions
-    /// for values that may be added in the future. Enabling this means you will have to update
-    /// your application whenever the GraphQL server schema adds new enum values to prevent it
-    /// from breaking.
-    pub no_future_proof_enums: bool,
-
-    /// The name of the language plugin (?) used for input files and artifacts
-    pub language: Option<TypegenLanguage>,
-
-    /// Mappings from custom scalars in your schema to built-in GraphQL
-    /// types, for type emission purposes.
-    pub custom_scalars: FnvIndexMap<ScalarName, CustomScalarType>,
-
-    /// This option enables emitting es modules artifacts.
-    pub eager_es_modules: bool,
+    #[serde(flatten)]
+    pub typegen_config: TypegenConfig,
 
     /// Query Persist Configuration
     /// It contains URL and addition parameters that will be included
@@ -740,41 +780,35 @@ pub struct SingleProjectConfigFile {
     #[serde(default)]
     pub feature_flags: Option<FeatureFlags>,
 
-    /// Keep the previous compiler behavior by outputting an union
-    /// of the raw type and null, and not the **correct** behavior
-    /// of an union with the raw type, null and undefined.
-    #[serde(default)]
-    pub typescript_exclude_undefined_from_nullable_union: bool,
-
     #[serde(default)]
     pub resolvers_schema_module: Option<ResolversSchemaModuleConfig>,
+
+    /// Opt out of source control checks/integration.
+    #[serde(default)]
+    pub no_source_control: Option<bool>,
 }
 
 impl Default for SingleProjectConfigFile {
     fn default() -> Self {
         Self {
+            json_schema: None,
             project_name: ProjectName::default(),
             schema: Default::default(),
             src: Default::default(),
             artifact_directory: Default::default(),
-            include: vec![],
-            extensions: vec![],
             excludes: get_default_excludes(),
             schema_extensions: vec![],
-            no_future_proof_enums: false,
-            language: None,
-            custom_scalars: Default::default(),
             schema_config: Default::default(),
-            eager_es_modules: false,
+            typegen_config: Default::default(),
             persist_config: None,
             is_dev_variable_name: None,
             codegen_command: None,
             js_module_format: JsModuleFormat::CommonJS,
             typegen_phase: None,
             feature_flags: None,
-            typescript_exclude_undefined_from_nullable_union: false,
             module_import_config: Default::default(),
             resolvers_schema_module: Default::default(),
+            no_source_control: Some(false),
         }
     }
 }
@@ -822,19 +856,6 @@ impl SingleProjectConfigFile {
     }
 
     fn create_multi_project_config(self, config_path: &Path) -> Result<MultiProjectConfigFile> {
-        if !self.include.is_empty() {
-            warn!(
-                r#"The configuration contains `include: {:#?}` section. This configuration option is no longer supported. Consider removing it."#,
-                &self.include
-            );
-        }
-        if !self.extensions.is_empty() {
-            warn!(
-                r#"The configuration contains `extensions: {:#?}` section. This configuration option is no longer supported. Consider removing it."#,
-                &self.extensions
-            );
-        }
-
         if self.typegen_phase.is_some() {
             return Err(Error::ConfigFileValidation {
                 config_path: config_path.into(),
@@ -852,18 +873,6 @@ impl SingleProjectConfigFile {
                 validation_errors: vec![err],
             }
         })?;
-
-        let language = self.language.ok_or_else(|| {
-            let mut variants = vec![];
-            for lang in TypegenLanguage::get_variants_as_string() {
-                variants.push(format!(r#"  "language": "{}""#, lang));
-            }
-
-            Error::ConfigError {
-                    details: format!("The `language` option is missing in the Relay configuration file. Please, specify one of the following options:\n{}", variants.join("\n")),
-                }
-            }
-        )?;
 
         let project_config = ConfigFileProject {
             output: self.artifact_directory.map(|dir| {
@@ -887,18 +896,7 @@ impl SingleProjectConfigFile {
                 })
                 .collect(),
             persist: self.persist_config,
-            typegen_config: TypegenConfig {
-                language,
-                custom_scalar_types: self.custom_scalars.clone(),
-                eager_es_modules: self.eager_es_modules,
-                flow_typegen: FlowTypegenConfig {
-                    no_future_proof_enums: self.no_future_proof_enums,
-                    ..Default::default()
-                },
-                typescript_exclude_undefined_from_nullable_union: self
-                    .typescript_exclude_undefined_from_nullable_union,
-                ..Default::default()
-            },
+            typegen_config: self.typegen_config,
             js_module_format: self.js_module_format,
             feature_flags: self.feature_flags,
             module_import_config: self.module_import_config,
@@ -921,14 +919,15 @@ impl SingleProjectConfigFile {
             excludes: self.excludes,
             is_dev_variable_name: self.is_dev_variable_name,
             codegen_command: self.codegen_command,
+            no_source_control: self.no_source_control,
             ..Default::default()
         })
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 #[serde(untagged)]
-enum ConfigFile {
+pub enum ConfigFile {
     /// Base case configuration (mostly of OSS) where the project
     /// have single schema, and single source directory
     SingleProject(SingleProjectConfigFile),
@@ -937,6 +936,16 @@ enum ConfigFile {
     /// This MultiProjectConfigFile is responsible for configuring
     /// these type of projects (complex)
     MultiProject(Box<MultiProjectConfigFile>),
+}
+
+impl ConfigFile {
+    pub fn json_schema() -> String {
+        let mut settings: SchemaSettings = Default::default();
+        settings.inline_subschemas = true;
+        let generator = gen::SchemaGenerator::from(settings);
+        let schema = generator.into_root_schema_for::<Self>();
+        serde_json::to_string_pretty(&schema).unwrap()
+    }
 }
 
 impl<'de> Deserialize<'de> for ConfigFile {
@@ -948,12 +957,12 @@ impl<'de> Deserialize<'de> for ConfigFile {
                 Ok(single_project_config) => Ok(ConfigFile::SingleProject(single_project_config)),
                 Err(single_project_error) => {
                     let error_message = format!(
-                        r#"The config file cannot be parsed as a multi-project config file due to:
-- {:?}.
+                        r#"The config file cannot be parsed as a single-project config file due to:
+ - {:?}.
 
-It also cannot be a single project config file due to:
-- {:?}."#,
-                        multi_project_error, single_project_error
+ It also cannot be a multi-project config file due to:
+ - {:?}."#,
+                        single_project_error, multi_project_error,
                     );
 
                     Err(DeError::custom(error_message))
@@ -963,7 +972,7 @@ It also cannot be a single project config file due to:
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Default, JsonSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ConfigFileProject {
     /// If a base project is set, the documents of that project can be
@@ -1059,6 +1068,7 @@ pub type PersistResult<T> = std::result::Result<T, PersistError>;
 pub struct ArtifactForPersister {
     pub text: String,
     pub relative_path: PathBuf,
+    pub override_schema: Option<String>,
 }
 
 #[async_trait]
@@ -1068,4 +1078,38 @@ pub trait OperationPersister {
     fn finalize(&self) -> PersistResult<()> {
         Ok(())
     }
+}
+
+// Below are structs that we use as part of our config that are defined in
+// crates that are not part of Relay. We are not able to implement `JsonSchema`
+// for these structs directly, so we define these shadow structs which match the
+// deserialization shape of the original. We can then use `#[serde(with =
+// "...")]` to have JsonSchema use these shadow structs to generate the schema.
+//
+// See [Schemars docs](https://graham.cool/schemars/examples/5-remote_derive/)
+// for more context on this pattern.
+
+/// Holds extended clock data that includes source control aware
+/// query metadata.
+/// <https://facebook.github.io/watchman/docs/scm-query.html>
+#[derive(JsonSchema)]
+#[serde(remote = "ScmAwareClockData")]
+pub struct ScmAwareClockDataJsonSchemaDef {
+    pub mergebase: Option<String>,
+    #[serde(rename = "mergebase-with")]
+    pub mergebase_with: Option<String>,
+    #[serde(rename = "saved-state")]
+    pub saved_state: Option<SavedStateClockDataJsonSchemaDef>,
+}
+
+/// Holds extended clock data that includes source control aware
+/// query metadata.
+/// <https://facebook.github.io/watchman/docs/scm-query.html>
+#[derive(JsonSchema)]
+#[serde(remote = "SavedStateClockData")]
+pub struct SavedStateClockDataJsonSchemaDef {
+    pub storage: Option<String>,
+    #[serde(rename = "commit-id")]
+    pub commit: Option<String>,
+    pub config: Option<Value>,
 }

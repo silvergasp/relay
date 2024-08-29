@@ -21,19 +21,11 @@ export type ReaderFragmentSpread = {
   +args?: ?$ReadOnlyArray<ReaderArgument>,
 };
 
-export type ReaderAliasedFragmentSpread = {
-  +kind: 'AliasedFragmentSpread',
-  +name: string,
-  +type: string,
-  +abstractKey?: ?string,
-  +fragment: ReaderFragmentSpread,
-};
-
 export type ReaderInlineDataFragmentSpread = {
   +kind: 'InlineDataFragmentSpread',
   +name: string,
   +selections: $ReadOnlyArray<ReaderSelection>,
-  +args: ?$ReadOnlyArray<ReaderArgument>,
+  +args?: ?$ReadOnlyArray<ReaderArgument>,
   +argumentDefinitions: $ReadOnlyArray<ReaderArgumentDefinition>,
 };
 
@@ -44,6 +36,7 @@ export type ReaderFragment = {
   +abstractKey?: ?string,
   +metadata?: ?{
     +connection?: $ReadOnlyArray<ConnectionMetadata>,
+    +throwOnFieldError?: boolean,
     +hasClientEdges?: boolean,
     +mask?: boolean,
     +plural?: boolean,
@@ -140,7 +133,7 @@ export type ReaderRootArgument = {
 export type ReaderInlineFragment = {
   +kind: 'InlineFragment',
   +selections: $ReadOnlyArray<ReaderSelection>,
-  +type: string,
+  +type: ?string,
   +abstractKey?: ?string,
 };
 
@@ -231,11 +224,17 @@ export type RequiredFieldAction = 'NONE' | 'LOG' | 'THROW';
 
 export type ReaderRequiredField = {
   +kind: 'RequiredField',
-  +field:
-    | ReaderField
-    | ReaderClientEdgeToClientObject
-    | ReaderClientEdgeToServerObject,
+  +field: ReaderField | ReaderClientEdge,
   +action: RequiredFieldAction,
+  +path: string,
+};
+
+export type CatchFieldTo = 'RESULT' | 'NULL';
+
+export type ReaderCatchField = {
+  +kind: 'CatchField',
+  +field: ReaderField | ReaderClientEdge,
+  +to: CatchFieldTo,
   +path: string,
 };
 
@@ -243,18 +242,29 @@ export type ResolverFunction = (...args: Array<any>) => mixed; // flowlint-line 
 // With ES6 imports, a resolver function might be exported under the `default` key.
 export type ResolverModule = ResolverFunction | {default: ResolverFunction};
 
-export type ResolverNormalizationInfo = {
+export type ResolverNormalizationInfo =
+  | ResolverOutputTypeNormalizationInfo
+  | ResolverWeakModelNormalizationInfo;
+
+export type ResolverOutputTypeNormalizationInfo = {
+  +kind: 'OutputType',
   +concreteType: string | null,
   +plural: boolean,
   +normalizationNode: NormalizationSelectableNode,
 };
 
+export type ResolverWeakModelNormalizationInfo = {
+  +kind: 'WeakModel',
+  +concreteType: string | null,
+  +plural: boolean,
+};
+
 export type ReaderRelayResolver = {
   +kind: 'RelayResolver',
-  +alias: ?string,
+  +alias?: ?string,
   +name: string,
-  +args: ?$ReadOnlyArray<ReaderArgument>,
-  +fragment: ?ReaderFragmentSpread,
+  +args?: ?$ReadOnlyArray<ReaderArgument>,
+  +fragment?: ?ReaderFragmentSpread,
   +path: string,
   +resolverModule: ResolverModule,
   +normalizationInfo?: ResolverNormalizationInfo,
@@ -262,10 +272,10 @@ export type ReaderRelayResolver = {
 
 export type ReaderRelayLiveResolver = {
   +kind: 'RelayLiveResolver',
-  +alias: ?string,
+  +alias?: ?string,
   +name: string,
-  +args: ?$ReadOnlyArray<ReaderArgument>,
-  +fragment: ?ReaderFragmentSpread,
+  +args?: ?$ReadOnlyArray<ReaderArgument>,
+  +fragment?: ?ReaderFragmentSpread,
   +path: string,
   +resolverModule: ResolverModule,
   +normalizationInfo?: ResolverNormalizationInfo,
@@ -274,7 +284,9 @@ export type ReaderRelayLiveResolver = {
 export type ReaderClientEdgeToClientObject = {
   +kind: 'ClientEdgeToClientObject',
   +concreteType: string | null,
-  +modelResolver?: ReaderRelayResolver | ReaderRelayLiveResolver,
+  +modelResolvers: {
+    [string]: ReaderRelayResolver | ReaderRelayLiveResolver,
+  } | null,
   +linkedField: ReaderLinkedField,
   +backingField:
     | ReaderRelayResolver
@@ -292,21 +304,24 @@ export type ReaderClientEdgeToServerObject = {
     | ReaderClientExtension,
 };
 
+export type ReaderClientEdge =
+  | ReaderClientEdgeToClientObject
+  | ReaderClientEdgeToServerObject;
+
 export type ReaderSelection =
   | ReaderCondition
-  | ReaderClientEdgeToClientObject
-  | ReaderClientEdgeToServerObject
+  | ReaderClientEdge
   | ReaderClientExtension
   | ReaderDefer
   | ReaderField
   | ReaderActorChange
   | ReaderFragmentSpread
-  | ReaderAliasedFragmentSpread
   | ReaderInlineDataFragmentSpread
   | ReaderAliasedInlineFragmentSpread
   | ReaderInlineFragment
   | ReaderModuleImport
   | ReaderStream
+  | ReaderCatchField
   | ReaderRequiredField
   | ReaderRelayResolver;
 

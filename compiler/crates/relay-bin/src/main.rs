@@ -21,6 +21,7 @@ use relay_compiler::build_project::artifact_writer::ArtifactValidationWriter;
 use relay_compiler::build_project::generate_extra_artifacts::default_generate_extra_artifacts_fn;
 use relay_compiler::compiler::Compiler;
 use relay_compiler::config::Config;
+use relay_compiler::config::ConfigFile;
 use relay_compiler::errors::Error as CompilerError;
 use relay_compiler::FileSourceKind;
 use relay_compiler::LocalPersister;
@@ -119,10 +120,15 @@ struct LspCommand {
     locate_command: Option<String>,
 }
 
+#[derive(Parser)]
+#[clap(about = "Print the Json Schema definition for the Relay compiler config.")]
+struct ConfigJsonSchemaCommand {}
+
 #[derive(clap::Subcommand)]
 enum Commands {
     Compiler(CompileCommand),
     Lsp(LspCommand),
+    ConfigJsonSchema(ConfigJsonSchemaCommand),
 }
 
 #[derive(ArgEnum, Clone, Copy)]
@@ -179,14 +185,15 @@ async fn main() {
     let result = match command {
         Commands::Compiler(command) => handle_compiler_command(command).await,
         Commands::Lsp(command) => handle_lsp_command(command).await,
+        Commands::ConfigJsonSchema(_) => {
+            println!("{}", ConfigFile::json_schema());
+            Ok(())
+        }
     };
 
-    match result {
-        Ok(_) => info!("Done."),
-        Err(err) => {
-            error!("{}", err);
-            std::process::exit(1);
-        }
+    if let Err(err) = result {
+        error!("{}", err);
+        std::process::exit(1);
     }
 }
 
@@ -246,7 +253,7 @@ fn set_project_flag(config: &mut Config, projects: Vec<String>) -> Result<(), Er
         }
     }
 
-    return Ok(());
+    Ok(())
 }
 
 async fn handle_compiler_command(command: CompileCommand) -> Result<(), Error> {
@@ -266,7 +273,7 @@ async fn handle_compiler_command(command: CompileCommand) -> Result<(), Error> {
     set_project_flag(&mut config, command.projects)?;
 
     if command.validate {
-        config.artifact_writer = Box::new(ArtifactValidationWriter::default());
+        config.artifact_writer = Box::<ArtifactValidationWriter>::default();
     }
 
     config.create_operation_persister = Some(Box::new(|project_config| {
@@ -314,6 +321,7 @@ async fn handle_compiler_command(command: CompileCommand) -> Result<(), Error> {
             })?;
     }
 
+    info!("Done.");
     Ok(())
 }
 
@@ -383,14 +391,12 @@ async fn handle_lsp_command(command: LspCommand) -> Result<(), Error> {
 
     let perf_logger = Arc::new(ConsoleLogger);
     let schema_documentation_loader: Option<Box<dyn SchemaDocumentationLoader<SDLSchema>>> = None;
-    let js_language_server = None;
 
     start_language_server(
         config,
         perf_logger,
         extra_data_provider,
         schema_documentation_loader,
-        js_language_server,
     )
     .await
     .map_err(|err| Error::LSPError {

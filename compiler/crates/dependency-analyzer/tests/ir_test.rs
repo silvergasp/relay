@@ -4,7 +4,7 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @generated SignedSource<<63358e3f870073e5e172f08289e48e48>>
+ * @generated SignedSource<<cbf75b3a347f72685bc732f1d587539a>>
  */
 
 mod ir;
@@ -94,6 +94,62 @@ async fn recursive_fragments() {
     let input = include_str!("ir/fixtures/recursive-fragments.graphql");
     let expected = include_str!("ir/fixtures/recursive-fragments.expected");
     test_fixture(transform_fixture, file!(), "recursive-fragments.graphql", "ir/fixtures/recursive-fragments.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn scalar_field_argument_enum_change() {
+    let input = include_str!("ir/fixtures/scalar-field-argument-enum-change.graphql");
+    let expected = include_str!("ir/fixtures/scalar-field-argument-enum-change.expected");
+    test_fixture(transform_fixture, file!(), "scalar-field-argument-enum-change.graphql", "ir/fixtures/scalar-field-argument-enum-change.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn schema_and_definitions_change() {
+    let input = include_str!("ir/fixtures/schema-and-definitions-change.graphql");
+    let expected = include_str!("ir/fixtures/schema-and-definitions-change.expected");
+    test_fixture(transform_fixture, file!(), "schema-and-definitions-change.graphql", "ir/fixtures/schema-and-definitions-change.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn schema_enum_and_object_change() {
+    let input = include_str!("ir/fixtures/schema-enum-and-object-change.graphql");
+    let expected = include_str!("ir/fixtures/schema-enum-and-object-change.expected");
+    test_fixture(transform_fixture, file!(), "schema-enum-and-object-change.graphql", "ir/fixtures/schema-enum-and-object-change.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn schema_enum_change() {
+    let input = include_str!("ir/fixtures/schema-enum-change.graphql");
+    let expected = include_str!("ir/fixtures/schema-enum-change.expected");
+    test_fixture(transform_fixture, file!(), "schema-enum-change.graphql", "ir/fixtures/schema-enum-change.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn schema_object_change() {
+    let input = include_str!("ir/fixtures/schema-object-change.graphql");
+    let expected = include_str!("ir/fixtures/schema-object-change.expected");
+    test_fixture(transform_fixture, file!(), "schema-object-change.graphql", "ir/fixtures/schema-object-change.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn schema_object_in_union_change() {
+    let input = include_str!("ir/fixtures/schema-object-in-union-change.graphql");
+    let expected = include_str!("ir/fixtures/schema-object-in-union-change.expected");
+    test_fixture(transform_fixture, file!(), "schema-object-in-union-change.graphql", "ir/fixtures/schema-object-in-union-change.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn schema_object_with_interface_change() {
+    let input = include_str!("ir/fixtures/schema-object-with-interface-change.graphql");
+    let expected = include_str!("ir/fixtures/schema-object-with-interface-change.expected");
+    test_fixture(transform_fixture, file!(), "schema-object-with-interface-change.graphql", "ir/fixtures/schema-object-with-interface-change.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn schema_union_change() {
+    let input = include_str!("ir/fixtures/schema-union-change.graphql");
+    let expected = include_str!("ir/fixtures/schema-union-change.expected");
+    test_fixture(transform_fixture, file!(), "schema-union-change.graphql", "ir/fixtures/schema-union-change.expected", input, expected).await;
 }
 
 #[tokio::test]

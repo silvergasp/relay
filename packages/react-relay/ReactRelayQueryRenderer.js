@@ -263,7 +263,7 @@ class ReactRelayQueryRenderer extends React.Component<Props, State> {
     });
   };
 
-  render(): React.Element<typeof ReactRelayContext.Provider> {
+  render(): React.MixedElement {
     const {renderProps, relayContext} = this.state;
     // Note that the root fragment results in `renderProps.props` is already
     // frozen by the store; this call is to freeze the renderProps object and
@@ -378,7 +378,7 @@ function fetchQueryAndComputeStateFromProps(
   requestCacheKey: ?string,
 ): Partial<State> {
   const {environment, query, variables, cacheConfig} = props;
-  const genericEnvironment = (environment: IEnvironment);
+  const genericEnvironment: IEnvironment = environment;
   if (query) {
     const request = getRequest(query);
     const operation = createOperationDescriptor(

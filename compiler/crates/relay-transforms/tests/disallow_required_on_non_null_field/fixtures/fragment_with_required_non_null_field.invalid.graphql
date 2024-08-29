@@ -1,0 +1,10 @@
+# expected-to-throw
+# relay:experimental_emit_semantic_nullability_types
+fragment MyFragment on User @throwOnFieldError {
+  some_field @required(action: THROW)
+}
+
+# %extensions%
+extend type User {
+  some_field: Int!
+}

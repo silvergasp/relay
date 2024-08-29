@@ -4,13 +4,27 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @generated SignedSource<<658d6474aef283a8bdaf1955696f6fbf>>
+ * @generated SignedSource<<52305c15753efb60305d9e0b604d36f3>>
  */
 
 mod validate_selection_conflict;
 
 use validate_selection_conflict::transform_fixture;
 use fixture_tests::test_fixture;
+
+#[tokio::test]
+async fn field_names_still_conflict_in_aliased_fragment() {
+    let input = include_str!("validate_selection_conflict/fixtures/field_names_still_conflict_in_aliased_fragment.graphql");
+    let expected = include_str!("validate_selection_conflict/fixtures/field_names_still_conflict_in_aliased_fragment.expected");
+    test_fixture(transform_fixture, file!(), "field_names_still_conflict_in_aliased_fragment.graphql", "validate_selection_conflict/fixtures/field_names_still_conflict_in_aliased_fragment.expected", input, expected).await;
+}
+
+#[tokio::test]
+async fn relay_resolver_value() {
+    let input = include_str!("validate_selection_conflict/fixtures/relay_resolver_value.graphql");
+    let expected = include_str!("validate_selection_conflict/fixtures/relay_resolver_value.expected");
+    test_fixture(transform_fixture, file!(), "relay_resolver_value.graphql", "validate_selection_conflict/fixtures/relay_resolver_value.expected", input, expected).await;
+}
 
 #[tokio::test]
 async fn same_alias_list_non_list() {
